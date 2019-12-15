@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Boxplots</title>
+    <script src="https://d3js.org/d3.v5.min.js"></script>
+  </head>
+
+	<body>
+
+		<div style="padding: 50px; float:left;">
+		</div>
+
+		<div id="chart" style="width: 400px; float:left;">
+			<h3>Create a boxplot</h3>
+			<p>Click in the center of the blue strip to add points.</p>
+			<p>Click point to remove them.</p>
+
+			<svg width="400" height="520">
+				<rect x="150" y="10" width="200" height="500" fill="#aef3e7"></rect>
+				<rect id="interactiveRect" x="190" y="10" width="120" height="500" fill="#8ee3ef"></rect>
+				<g id="boxplot" style="display: none;">
+					<line id="h1" x1="190" y1="0" x2="310" y2="0" stroke="#37718e" stroke-width="3"></line>
+					<line id="v1" x1="250" y1="0" x2="250" y2="0" stroke="#37718e" stroke-width="3"></line>
+					<rect id="r1" x="190" y="0" width="120" height="0" fill="#f0f7ee" stroke="#37718e" stroke-width="3"></rect>
+					<rect id="r2" x="190" y="0" width="120" height="0" fill="#f0f7ee" stroke="#37718e" stroke-width="3"></rect>
+					<line id="v2" x1="250" y1="0" x2="250" y2="0" stroke="#37718e" stroke-width="3"></line>
+					<line id="h2" x1="190" y1="0" x2="310" y2="0" stroke="#37718e" stroke-width="3"></line>
+				</g>
+			</svg>
+		</div>
+
+		<div style="width: 300px; float: left;" >
+			<br><br><br><br><br><br><br>
+			<p>Data values: <span id="dv"></span></p>
+			<p>Upper whisker: <span id="uw"></span></p>
+			<p>Q3: <span id="q3"></span></p>
+			<p>Median: <span id="q2"></span></p>
+			<p>Q1: <span id="q1"></span></p>
+			<p>Lower whisker: <span id="lw"></span></p>
+		</div>
+
+		<div style="width: 400px; float: left;">
+				<h3>How to Read a Boxplot</h3>
+				<p>A boxplot is a graphical representation of a dataset spread.</p> 
+				<ul>
+					<li>The median, the horizontal line inside the green rectangle, is exactly in the middle. 50% of the data is below it and 50% is above it.</li>
+					<li>Quantiles are values that divide the data in 4 equally big groups.</li>
+					<li>The first quantile is the bottom edge of the green rectangle. 25% of the data is bellow that line.</li>
+					<li>The median is also the second quantile.</li>
+					<li>The third quantile is the top edge of the green rectangle. 25% of the data is above that line.</li>
+					<li>The difference between the third quantile and the first quantile (the height of the green rectangle) is called the interquartile range.</li>
+					<li>We call outliers (red points) to the points whose values are far away from the median.</li>
+					<li>A value is an outlier if it is equal to or smaller than the first quantile minus 1.5 times the interquartile range or if it is equal to or bigger than the third quantile plus 1.5 times the interquartile range.</li>
+					<li>The upper and lower whiskers are drawn to show the barrier between outliers and not outliers.</li>
+				</ul>
+			</div>
+		
+		
+		<script type="text/javascript">
+			var svg = d3.select("svg");
+			var summary = d3.select("svg#summary");
+			var rect = svg.select("#interactiveRect");
+			var plot_group = svg.select("g#boxplot");
+			
+			var yScale = d3.scaleLinear().domain([-100,100]).range([510,10]);
+			var yAxis = d3.axisLeft().scale(yScale);
+			yAxis.ticks(5);
+			yAxis.tickSize(10);
+
+			var dataset = [];
+			var q1=null;
+			var q2=null;
+			var q3=null;
+			var upper_whisker = null;
+			var lower_whisker = null;
+			var outliers = [];
+			var non_outliers = [];
+
+
+			svg.append("g").attr("id","yAxis").attr("transform","translate(50,0)").call(yAxis);
+			d3.select("#yAxis").attr("font-size",15).selectAll('line').style('stroke-width',5);
+			d3.select("#yAxis").select('path').style('stroke-width',5);
+
+			function removeCircle() {
+				cx= d3.select(this).attr("cx");
+				cy= d3.select(this).attr("cy");
+				sel = svg.selectAll("circle").filter(function(){
+					return d3.select(this).attr("cx")!=cx || d3.select(this).attr("cy")!=cy
+				});
+				dataset = sel.data();
+				
+				
+				updateAll();
+			}
+
+			function showText() {
+				var textID = d3.select(this).attr("cx")+"_"+d3.select(this).attr("cy");
+				d3.select("[id=\""+textID+"\"").style("display","block")
+			}
+
+			function hideText() {
+				var textID = d3.select(this).attr("cx")+"_"+d3.select(this).attr("cy");
+				svg.select("[id=\""+textID+"\"").style("display","none")
+			}
+
+			function updateCircles() {
+				var circles = svg.selectAll("circle").data(dataset);
+
+				circles.enter().append("circle").attr("cx",d => d[0]).attr("cy",d => d[1]).attr("r",5)
+				.attr("fill","#254e70")
+				.on("click",removeCircle).on("mouseover",showText).on("mouseout",hideText)
+				.merge(circles)
+				.attr("cx",d => d[0])
+				.attr("cy",d => d[1]);
+
+				circles.exit().remove();
+
+				var labels = svg.selectAll("text.label").data(dataset);
+				
+				labels.enter().append("text")
+				.style("display","none").attr("class","label")
+				.merge(labels)
+				.attr("x",d=>d[0]+7)
+				.attr("y",d=>d[1]-7)
+				.attr("id",d => d[0]+"_"+d[1])
+				.text(d=> Math.round(yScale.invert(d[1])*100)/100);
+
+				labels.exit().remove();
+			}
+
+			function addCircle() {
+				var m = d3.mouse(this);
+				var new_x = yScale(Math.round(yScale.invert(m[0])*100)/100)
+				var new_y = yScale(Math.round(yScale.invert(m[1])*100)/100)
+		
+				dataset.push([new_x,new_y]);
+
+				updateAll();
+			}
+
+			function updateSummary() {
+				summary_data = dataset.map(function(d){
+					return Math.round(yScale.invert(d[1])*100)/100
+				});
+				summary_data.sort(function(a,b){return a - b});
+	
+				d3.select("#dv").text(summary_data.join(", "));
+
+				q1 = d3.quantile(summary_data,0.25);
+				q2 = d3.quantile(summary_data,0.5);
+				q3 = d3.quantile(summary_data,0.75);
+				upper_whisker = q3 + (1.5*(q3-q1));
+				lower_whisker = q1 - (1.5*(q3-q1));
+				
+				outliers = svg.selectAll("circle").filter(function(){
+					return d3.select(this).attr("cy") < yScale(upper_whisker) || d3.select(this).attr("cy") > yScale(lower_whisker)
+				});
+				non_outliers = svg.selectAll("circle").filter(function(){
+					return d3.select(this).attr("cy") >= yScale(upper_whisker) && d3.select(this).attr("cy") <= yScale(lower_whisker)
+				});
+
+				non_outliers_data = non_outliers.data().map(function(d){
+					return Math.round(yScale.invert(d[1])*100)/100
+				});
+
+				upper_whisker = Math.min(upper_whisker,d3.max(non_outliers_data));
+				lower_whisker = Math.max(lower_whisker,d3.min(non_outliers_data));
+
+				d3.select("#q1").text( Math.round(q1*100)/100);
+				d3.select("#q2").text(Math.round(q2*100)/100);
+				d3.select("#q3").text(Math.round(q3*100)/100);
+				d3.select("#uw").text(Math.round(upper_whisker*100)/100);
+				d3.select("#lw").text(Math.round(lower_whisker*100)/100);
+			}
+
+			function updatePlot() {
+				var data_count = summary_data.length;
+	
+				if(data_count == 0){
+					plot_group.style("display","none");
+				}else{
+					plot_group.style("display","block");
+					var time = 0;
+					var outlier_color = "#254e70";
+					if(data_count > 1){
+						time = 1000;
+						outlier_color = "#c33c54";
+					}
+					plot_group.select("line#h1").transition().duration(time)
+					.attr("y1",yScale(upper_whisker)).attr("y2",yScale(upper_whisker));
+					plot_group.select("line#h2").transition().duration(time)
+					.attr("y1",yScale(lower_whisker)).attr("y2",yScale(lower_whisker));
+					plot_group.select("line#v1").transition().duration(time)
+					.attr("y1",yScale(upper_whisker)).attr("y2",yScale(q3));
+					plot_group.select("line#v2").transition().duration(time)
+					.attr("y1",yScale(lower_whisker)).attr("y2",yScale(q1));
+					plot_group.select("rect#r1").transition().duration(time)
+					.attr("y",yScale(q3)).attr("height",yScale(q2)-yScale(q3));
+					plot_group.select("rect#r2").transition().duration(time)
+					.attr("y",yScale(q2)).attr("height",yScale(q1)-yScale(q2));
+
+					
+					outliers.transition().duration(time).attr("fill",outlier_color);
+					non_outliers.transition().duration(time).attr("fill","#254e70");
+				}
+			}
+
+			function updateAll() {
+				updateCircles();
+				updateSummary();
+				updatePlot();
+			}
+			
+
+			
+			rect.on("click", addCircle);
+			plot_group.on("click", addCircle);
+		</script>
+
+	</body>
+
+</html>
